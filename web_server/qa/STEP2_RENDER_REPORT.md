@@ -36,10 +36,25 @@ page using the repo's Qt save-rendering stack.
 ## Visual Notes
 
 - Japanese output has translated text visible in all detected bubbles. Placement
-  is usable, but not fully polished; some text sits close to bubble edges.
+  is usable, but not fully polished; some text sits close to bubble edges and
+  very short translations can render small.
 - Korean output has translated text visible in all detected bubbles. The lower
   left partial bubble still shows faint residual Korean at the bottom edge
   because the original inpaint mask did not fully cover that region.
+- Known limitation: partial or cut-off bubbles can retain source text when the
+  leftover glyphs fall outside the detector's text block. This is documented and
+  deferred because it is expected to be uncommon; solving it properly requires a
+  bubble-shape cleanup mask rather than broader rectangular erasing.
+
+## Step 2.5 Tuning
+
+- Increased the headless inpaint mask padding from 5 to 9 for translated blocks.
+- Centered rendered text inside the fitted render box instead of anchoring every
+  text item at the top-left.
+- Added a conservative light-region backplate before final text drawing to hide
+  small leftover glyph fragments in white speech bubbles.
+- Re-ran the Korean WebP and Japanese JPG samples after these changes. Both
+  returned HTTP 200 and rendered translated text.
 
 ## Evidence Snippets
 

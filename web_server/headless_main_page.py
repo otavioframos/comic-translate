@@ -150,7 +150,7 @@ class _ImageViewer:
         ]
         if self._img is None:
             return None
-        return generate_mask(self._img, blocks)
+        return generate_mask(self._img, blocks, default_padding=9)
 
     def clear_brush_strokes(self, *_, **__):
         return None

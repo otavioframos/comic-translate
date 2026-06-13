@@ -15,6 +15,7 @@ import os
 import threading
 from pathlib import Path
 
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import Response
 
@@ -196,6 +197,9 @@ def _render(pipeline, main_page):
     outline_width = float(settings.outline_width)
     line_spacing = float(settings.line_spacing)
 
+    render_image = image.copy()
+    _paint_text_backplates(render_image, main_page.blk_list)
+
     text_items_state = []
     rendered_count = 0
     for block in main_page.blk_list:
@@ -204,12 +208,14 @@ def _render(pipeline, main_page):
             continue
 
         x1, y1, width, height = block.xywh
+        width = int(max(1, width))
+        height = int(max(1, height))
         vertical = is_vertical_block(block, target_lang_code)
         wrapped, font_size, rendered_width, rendered_height = pyside_word_wrap(
             translation,
             font_family,
-            int(max(1, width)),
-            int(max(1, height)),
+            width,
+            height,
             line_spacing,
             outline_width,
             settings.bold,
@@ -222,6 +228,15 @@ def _render(pipeline, main_page):
             vertical,
             is_no_space_lang(target_lang_code),
             return_metrics=True,
+        )
+        text_x, text_y = _center_text_position(
+            float(x1),
+            float(y1),
+            float(width),
+            float(height),
+            float(rendered_width),
+            float(rendered_height),
+            float(outline_width if settings.outline else 0),
         )
 
         font_color = get_smart_text_color(block.font_color, base_font_color)
@@ -237,7 +252,7 @@ def _render(pipeline, main_page):
             bold=settings.bold,
             italic=settings.italic,
             underline=settings.underline,
-            position=(float(x1), float(y1)),
+            position=(text_x, text_y),
             rotation=float(getattr(block, "angle", 0) or 0),
             scale=1.0,
             transform_origin=getattr(block, "tr_origin_point", None) or (0, 0),
@@ -258,11 +273,69 @@ def _render(pipeline, main_page):
         text_items_state.append(text_props.to_dict())
         rendered_count += 1
 
-    renderer = ImageSaveRenderer(image)
+    renderer = ImageSaveRenderer(render_image)
     renderer.add_state_to_image({"text_items_state": text_items_state})
     out = renderer.render_to_image()
     print(f"[render] text_items={rendered_count}")
     return out
+
+
+def _center_text_position(x, y, box_width, box_height, text_width, text_height, outline_width):
+    pad = max(0.0, outline_width)
+    usable_width = max(1.0, box_width - 2 * pad)
+    usable_height = max(1.0, box_height - 2 * pad)
+    dx = max(0.0, (usable_width - text_width) / 2)
+    dy = max(0.0, (usable_height - text_height) / 2)
+    return x + pad + dx, y + pad + dy
+
+
+def _paint_text_backplates(image, blocks):
+    height, width = image.shape[:2]
+    for block in blocks:
+        if not getattr(block, "translation", ""):
+            continue
+        x1, y1, x2, y2 = _expanded_bounds(getattr(block, "xyxy", None), width, height)
+        if x2 <= x1 or y2 <= y1:
+            continue
+        crop = image[y1:y2, x1:x2]
+        has_bubble = getattr(block, "bubble_xyxy", None) is not None
+        if (
+            getattr(block, "text_class", None) != "text_bubble"
+            and not has_bubble
+            and not _is_light_region(crop)
+        ):
+            continue
+        fill = _bubble_fill_color(crop)
+        image[y1:y2, x1:x2] = fill
+
+
+def _expanded_bounds(xyxy, image_width, image_height, ratio=0.18, min_pad=8):
+    if xyxy is None:
+        return 0, 0, 0, 0
+    x1, y1, x2, y2 = [float(v) for v in xyxy[:4]]
+    pad_x = max(min_pad, int((x2 - x1) * ratio))
+    pad_y = max(min_pad, int((y2 - y1) * ratio))
+    return (
+        max(0, int(x1 - pad_x)),
+        max(0, int(y1 - pad_y)),
+        min(image_width, int(x2 + pad_x)),
+        min(image_height, int(y2 + pad_y)),
+    )
+
+
+def _bubble_fill_color(crop):
+    if crop.size == 0:
+        return np.array([255, 255, 255], dtype=np.uint8)
+    bright_pixels = crop[np.all(crop > 180, axis=2)]
+    if bright_pixels.size == 0:
+        return np.array([255, 255, 255], dtype=np.uint8)
+    return np.median(bright_pixels, axis=0).astype(np.uint8)
+
+
+def _is_light_region(crop):
+    if crop.size == 0:
+        return False
+    return float(np.mean(np.all(crop > 170, axis=2))) >= 0.35
 
 
 def _ensure_qt_app():

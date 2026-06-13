@@ -30,3 +30,6 @@ The Desktop file `korean sample.webp` is a stronger Korean sample. It returned H
 
 ## 2026-06-13 — Step 2 renderer — resolved
 The server now renders translated text through the repo's Qt save-rendering path (`ImageSaveRenderer` plus `TextItemProperties`) instead of a separate Pillow-only renderer. This keeps the headless output closer to desktop/batch export behavior while avoiding GUI window setup.
+
+## 2026-06-13 — partial-bubble residual text — deferred
+The replacement Korean sample has a cut-off lower bubble where leftover source glyphs sit outside the detected text block. Wider text masks and conservative render backplates improve normal bubbles but do not fully solve this edge case. Defer a full fix unless it appears frequently; the proper solution is a bubble-shape cleanup mask, not aggressive rectangular erasing.
