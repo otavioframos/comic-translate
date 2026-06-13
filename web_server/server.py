@@ -13,14 +13,14 @@ import time
 import threading
 from pathlib import Path
 
-import cv2
-import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import Response
 
 # This file lives in web_server/. The repo root (with pipeline/, controller.py)
 # is its parent — add it so we can import the real pipeline.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import imkit as imk
 
 from config import CONFIG
 from headless_main_page import HeadlessMainPage
@@ -44,6 +44,7 @@ def _warm():
     start = time.time()
     _main_page = HeadlessMainPage(CONFIG.source_lang, CONFIG.target_lang)
     _pipeline = ComicTranslatePipeline(_main_page)
+    _main_page.pipeline = _pipeline
     print(f"[warm] pipeline ready in {time.time() - start:.1f}s "
           f"(translator = Ollama:{CONFIG.ollama_model})")
 
@@ -76,9 +77,12 @@ async def translate(
     tgt = tgt or CONFIG.target_lang
 
     raw = await file.read()
-    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
+    try:
+        img = imk.decode_image(raw)
+    except Exception:
         raise HTTPException(400, "Could not read that file as an image.")
+    if img.ndim == 2:
+        img = imk.merge_channels([img, img, img])
 
     with _LOCK:  # one page at a time
         try:
@@ -92,10 +96,12 @@ async def translate(
                 f"missing attribute to web_server/headless_main_page.py.",
             )
 
-    ok, buf = cv2.imencode(".png", out)
-    if not ok:
+    try:
+        buf = imk.encode_image(out, ".png")
+    except Exception as exc:
+        print(f"[encode] failed: {exc}")
         raise HTTPException(500, "Failed to encode the output image.")
-    return Response(content=buf.tobytes(), media_type="image/png")
+    return Response(content=buf, media_type="image/png")
 
 
 # ---------------------------------------------------------------------------
@@ -108,21 +114,30 @@ def _run_pipeline(img, src, tgt):
     mp.load_image(img)
     _dump("00_input.png", img)
 
-    # 1) find text blocks                            (VERIFY method signature)
-    p.detect_blocks()
+    # 1) find text blocks
+    detect_result = p.detect_blocks(load_rects=False)
+    p.on_blk_detect_complete(detect_result)
+    mp.image_viewer.sync_rectangles_from_blocks(mp.blk_list)
+    print(f"[detect] blocks={len(mp.blk_list)}")
     _dump("01_blocks.png", _draw_boxes(img, mp.blk_list))
 
-    # 2) OCR each block -> fills block.text          (VERIFY .text attribute)
+    # 2) OCR each block -> fills block.text
     p.OCR_image()
+    sources = [getattr(b, "text", "") for b in mp.blk_list]
+    for idx, text in enumerate(sources, 1):
+        print(f"[ocr] {idx}: {text!r}")
 
     # 3) translate locally via Ollama (the $0 path) -> write block.translation
-    sources = [getattr(b, "text", "") for b in mp.blk_list]   # (VERIFY .text)
     translations = translate_lines(sources, src, tgt)
     for block, text in zip(mp.blk_list, translations):
-        setattr(block, "translation", text)                   # (VERIFY .translation)
+        setattr(block, "translation", text)
+    for idx, text in enumerate(translations, 1):
+        print(f"[ollama:{CONFIG.ollama_model}] {idx}: {text!r}")
 
     # 4) erase the original text
-    p.inpaint()
+    patches = p.inpaint()
+    mp.apply_inpaint_patches(patches)
+    print(f"[inpaint] patches={len(patches or [])}")
     _dump("02_inpainted.png", mp.current_image())
 
     # 5) render the translated text back on
@@ -146,14 +161,17 @@ def _render(pipeline, main_page):
 
 def _dump(name, img):
     if CONFIG.debug and img is not None:
-        cv2.imwrite(str(CONFIG.debug_dir / name), img)
+        CONFIG.debug_dir.mkdir(parents=True, exist_ok=True)
+        imk.write_image(str(CONFIG.debug_dir / name), img)
 
 
 def _draw_boxes(img, blk_list):
     vis = img.copy()
     for block in blk_list:
-        xyxy = getattr(block, "xyxy", None)        # (VERIFY box attribute)
+        xyxy = getattr(block, "bubble_xyxy", None)
+        if xyxy is None:
+            xyxy = getattr(block, "xyxy", None)
         if xyxy is not None:
             x1, y1, x2, y2 = map(int, xyxy)
-            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            vis = imk.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
     return vis

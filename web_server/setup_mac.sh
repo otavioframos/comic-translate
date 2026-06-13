@@ -15,9 +15,23 @@ if [ ! -d "pipeline" ] || [ ! -f "controller.py" ]; then
 fi
 
 echo "==> 2/5  Creating an isolated Python environment (.venv)..."
-python3 -m venv .venv
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ]; then
+  if command -v python3.12 >/dev/null 2>&1; then
+    PYTHON_BIN="python3.12"
+  elif [ -x /opt/homebrew/bin/python3.12 ]; then
+    PYTHON_BIN="/opt/homebrew/bin/python3.12"
+  else
+    echo "STOP. Python 3.12 is required. Install it with:"
+    echo "  brew install python@3.12"
+    exit 1
+  fi
+fi
+
+"$PYTHON_BIN" -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
+python --version
 python -m pip install --upgrade pip >/dev/null
 
 echo "==> 3/5  Installing dependencies (this can take several minutes)..."
@@ -33,6 +47,13 @@ if ! command -v ollama >/dev/null 2>&1; then
   echo "    3. Run this setup script again."
   echo ""
   exit 1
+fi
+
+OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+if ! curl -s "${OLLAMA_HOST}/api/tags" >/dev/null 2>&1; then
+  echo "    Starting Ollama in the background..."
+  ollama serve >/dev/null 2>&1 &
+  sleep 3
 fi
 
 MODEL="$(grep -E '^OLLAMA_MODEL=' web_server/.env 2>/dev/null | cut -d= -f2)"

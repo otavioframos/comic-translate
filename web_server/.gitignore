@@ -3,6 +3,7 @@
 
 # Server scratch output
 debug_out/
+samples/
 translated_*.png
 translated_*.jpg
 

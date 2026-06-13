@@ -28,7 +28,10 @@ each missing one produces a crystal-clear error, e.g.
 Attributes marked (VERIFY) are educated guesses from the public code — confirm
 each against YOUR fork before trusting it.
 """
+import numpy as np
+
 from config import CONFIG
+from modules.utils.image_utils import generate_mask
 
 
 class _Combo:
@@ -44,22 +47,103 @@ class _Combo:
         self._value = value
 
 
+class _UI:
+    """Tiny translation shim for settings code that calls settings_page.ui.tr()."""
+
+    @staticmethod
+    def tr(value):
+        return value
+
+
+class _UndoStack:
+    def push(self, _command):
+        return None
+
+    def beginMacro(self, _name):
+        return None
+
+    def endMacro(self):
+        return None
+
+
+class _UndoGroup:
+    def __init__(self):
+        self._stack = _UndoStack()
+
+    def activeStack(self):
+        return self._stack
+
+
+class _RectController:
+    def __init__(self, main_page):
+        self.main_page = main_page
+
+    def find_corresponding_rect(self, block, _iou_threshold=0.5):
+        return block
+
+    def find_corresponding_text_block(self, rect, _iou_threshold=0.5):
+        for block in self.main_page.blk_list:
+            if tuple(getattr(block, "xyxy", ())) == tuple(rect):
+                return block
+        return None
+
+
+class _Signal:
+    def emit(self, *args, **kwargs):
+        return None
+
+
 class _ImageViewer:
     """Fakes main_page.image_viewer — the on-screen canvas holding the page."""
 
-    def __init__(self):
+    def __init__(self, main_page):
+        self.main_page = main_page
         self._img = None  # current page as a BGR numpy array (OpenCV order)
+        self.rectangles = []
+        self.selected_rect = None
+        self.empty = True
 
-    # (VERIFY) The real viewer exposes the current image through one of these.
-    # Grep controller.py / the handlers for:  image_viewer.<something>
     def set_image_array(self, img):
         self._img = img
+        self.empty = img is None
 
-    def get_image_array(self):
+    def get_image_array(self, *_, **__):
         return self._img
 
-    # Some code paths also call .hasPhoto() / read .photo — add them here as the
-    # AttributeError messages demand. Keep them no-ops or simple returns.
+    def hasPhoto(self):
+        return self._img is not None
+
+    def clear_rectangles(self, *_, **__):
+        self.rectangles = []
+        self.selected_rect = None
+
+    def clear_rectangles_in_visible_area(self):
+        self.clear_rectangles()
+
+    def add_rectangle(self, _rect, _position, *_args, **_kwargs):
+        marker = object()
+        self.rectangles.append(marker)
+        return marker
+
+    def select_rectangle(self, rect):
+        self.selected_rect = rect
+
+    def sync_rectangles_from_blocks(self, blocks):
+        self.rectangles = list(blocks or [])
+        self.selected_rect = self.rectangles[0] if self.rectangles else None
+
+    def get_mask_for_inpainting(self):
+        blocks = [
+            blk for blk in self.main_page.blk_list
+            if getattr(blk, "text", "").strip()
+            and getattr(blk, "translation", "").strip()
+        ]
+        if self._img is None:
+            return None
+        return generate_mask(self._img, blocks)
+
+    def clear_brush_strokes(self, *_, **__):
+        return None
 
 
 class _Settings:
@@ -71,6 +155,7 @@ class _Settings:
     """
 
     def __init__(self, source_lang, target_lang):
+        self.ui = _UI()
         self.source_lang = source_lang
         self.target_lang = target_lang
 
@@ -80,13 +165,20 @@ class _Settings:
             "translator": "Custom",  # we translate ourselves via Ollama
             "ocr": "Default",        # Default => manga-ocr / Pororo / PPOCRv5
             "detector": "Default",
+            "inpainter": "AOT",
         }.get(key, "Default")
 
     def get_credentials(self, service=""):
         return {}  # keyless: Ollama needs no credentials
 
     def get_llm_settings(self):
-        return {"temperature": 0.3, "image_input_enabled": False}
+        return {"extra_context": "", "temperature": 0.3, "image_input_enabled": False}
+
+    def is_gpu_enabled(self):
+        return False
+
+    def get_hd_strategy_settings(self):
+        return {"strategy": "Original"}
 
 
 class HeadlessMainPage:
@@ -95,22 +187,47 @@ class HeadlessMainPage:
         self.target_lang = target_lang or CONFIG.target_lang
 
         # ---- core state the pipeline reads and mutates -----------------------
-        self.image_viewer = _ImageViewer()
+        self.image_viewer = _ImageViewer(self)
         self.settings_page = _Settings(self.source_lang, self.target_lang)
+        self.pipeline = None
         self.blk_list = []        # detected text blocks land here
         self.curr_img_idx = 0
-        self.image_files = []     # (VERIFY) some steps index into this
-        self.image_states = {}    # (VERIFY) per-image state cache
+        self.image_files = ["headless-page.png"]
+        self.image_states = {"headless-page.png": {}}
+        self.image_skipped = {}
+        self.file_handler = None
+        self.progress_update = _Signal()
+        self.patches_processed = _Signal()
+        self.blk_rendered = _Signal()
+        self.render_state_ready = _Signal()
+        self.undo_group = _UndoGroup()
+        self.rect_item_ctrl = _RectController(self)
+        self.image_ctrl = None
+        self.webtoon_mode = False
 
         # ---- language plumbing (VERIFY names against controller.py) ----------
         self.lang_mapping = {}                       # display name -> code
         self.s_combo = _Combo(self.source_lang)      # source-language widget
         self.t_combo = _Combo(self.target_lang)      # target-language widget
+        self.button_to_alignment = {}
 
     # ---- convenience helpers the SERVER calls (not part of the GUI API) ------
     def load_image(self, bgr_img):
         self.image_viewer.set_image_array(bgr_img)
         self.blk_list = []
+        self.image_viewer.clear_rectangles()
+
+    def apply_inpaint_patches(self, patches):
+        image = self.current_image()
+        if image is None:
+            return
+        for patch in patches or []:
+            x, y, w, h = [int(v) for v in patch["bbox"]]
+            patch_img = patch.get("image")
+            if patch_img is None:
+                continue
+            image[y:y + h, x:x + w] = patch_img
+        self.image_viewer.set_image_array(np.ascontiguousarray(image))
 
     def current_image(self):
         return self.image_viewer.get_image_array()
@@ -121,3 +238,16 @@ class HeadlessMainPage:
         self.settings_page.target_lang = tgt
         self.s_combo.setCurrentText(src)
         self.t_combo.setCurrentText(tgt)
+
+    def connect_rect_item_signals(self, *_args, **_kwargs):
+        return None
+
+    def set_tool(self, *_args, **_kwargs):
+        return None
+
+    def render_settings(self):
+        return type("RenderSettings", (), {
+            "font_family": "Arial",
+            "upper_case": False,
+            "outline": False,
+        })()
