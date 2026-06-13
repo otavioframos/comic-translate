@@ -20,7 +20,7 @@ annotate any you can't with the blocker.
 ## Code completed
 - [x] 9. No `Shim incomplete` (501) errors; added shim attributes documented
 - [x] 10. Wrong `(VERIFY)` names corrected to match real code
-- [x] 11. Korean page run, or recorded as "not tested — no sample" (ran Desktop `korean sample.jpg`; caveat in QA report)
+- [x] 11. Korean page run, or recorded as "not tested — no sample" (replacement Desktop `korean sample.webp` passed)
 
 ## Deliverables
 - [x] 12. `qa/QA_REPORT.md` written (pass/fail, shim attrs, fixes, model, latency)

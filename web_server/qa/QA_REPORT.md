@@ -7,9 +7,9 @@ Model: `qwen2.5:7b` via local Ollama
 
 ## Summary
 
-Step 1 is functionally passing for the supplied Japanese sample: the server boots, `/health` returns OK, a page POST returns HTTP 200, detection finds text blocks, OCR produces non-empty source text, Ollama returns non-empty translations, and inpainting returns a cleaned PNG. The render step remains intentionally stubbed.
+Step 1 is functionally passing for the supplied Japanese and Korean samples: the server boots, `/health` returns OK, page POSTs return HTTP 200, detection finds text blocks, OCR produces non-empty source text, Ollama returns non-empty translations, and inpainting returns cleaned images. The render step remains intentionally stubbed.
 
-The Desktop file named `korean sample.jpg` also returned HTTP 200, but the page content appears mostly Japanese/Instagram text rather than clear Korean. It still exercised the Korean code path and produced non-empty OCR/translation for detected blocks, but this is not a strong Korean-language quality sample.
+The first Desktop file named `korean sample.jpg` exercised the Korean route but was not a strong Korean-language quality sample. The replacement Desktop file `korean sample.webp` is a stronger Korean sample and passed the same detection, OCR, translation, and inpainting path.
 
 ## Acceptance Criteria
 
@@ -23,7 +23,7 @@ The Desktop file named `korean sample.jpg` also returned HTTP 200, but the page 
 8. PASS WITH NOTE — `02_inpainted.png` erased the detected text regions. Japanese output had a small residual mark in one right-side bubble, but the original text was materially removed.
 9. PASS — No `Shim incomplete` / HTTP 501 errors remain in tested paths.
 10. PASS — Wrong or incomplete `(VERIFY)` assumptions were corrected in `server.py` and `headless_main_page.py`.
-11. PASS WITH CAVEAT — `/Users/otavioramos/Desktop/korean sample.jpg` sent with `Korean English` returned HTTP 200. The sample appears not to contain clear Korean text, so Korean OCR quality was not strongly validated.
+11. PASS — `/Users/otavioramos/Desktop/korean sample.webp` sent with `Korean English` returned HTTP 200. It produced Korean OCR text and non-empty English translations for all detected blocks.
 12. PASS — This report exists.
 13. PASS — `PROGRESS.md` updated.
 14. PASS — Code changes committed and pushed. No `.env`, `debug_out/`, `.venv/`, downloaded models, or generated translated images are included.
@@ -33,8 +33,9 @@ The Desktop file named `korean sample.jpg` also returned HTTP 200, but the page 
 - Cold setup/model path: `setup_mac.sh` pulled Ollama `qwen2.5:7b`; first synthetic Japanese run was 115.67s and included first-time detection/OCR downloads.
 - Japanese real sample first run after model downloads: 25.80s.
 - Japanese real sample warm run: 16.08s.
-- Korean-named sample first run: 54.59s, including first-time Korean PPOCR and AOT inpainting downloads.
-- Korean-named sample warm run: 20.94s.
+- First Korean-named sample first run: 54.59s, including first-time Korean PPOCR and AOT inpainting downloads.
+- First Korean-named sample warm run: 20.94s.
+- Replacement Korean WebP sample run: 42.24s.
 
 ## Shim Attributes Added
 
@@ -106,22 +107,22 @@ Japanese sample:
 [inpaint] patches=5
 ```
 
-Korean-named sample:
+Replacement Korean sample:
 
 ```text
-[detect] blocks=5
-[ocr] 1: 'barbie_T_'
-[ocr] 2: '< 740 barbie__ dor best_*** miniminimi_***'
-[ocr] 3: 'o N -'
-[ocr] 4: ''
-[ocr] 5: 'NN'
-[ollama:qwen2.5:7b] 1: 'Barbie T_'
-[ollama:qwen2.5:7b] 2: '< 740 Barbie __ dor best_*** mini mini mini_***'
-[ollama:qwen2.5:7b] 3: 'oh no -'
-[ollama:qwen2.5:7b] 4: ''
-[ollama:qwen2.5:7b] 5: 'nn'
+[detect] blocks=4
+[ocr] 1: "가볍게 그리고'과거에'는 무슨 말이야?"
+[ocr] 2: '대학 갈돈 없어. 이 얘기는 이미 몇 번이나 했잖아-'
+[ocr] 3: '대단한 일이야, 히로! 내가 년*대성할* 우명이라고늘 말해장아!'
+[ocr] 4: '-뭐? 무슨 새 월급?'
+[ollama:qwen2.5:7b] 1: "Gently and 'past'—what are you talking about?"
+[ollama:qwen2.5:7b] 2: "I don't have money for college. I've already told this story a few times-"
+[ollama:qwen2.5:7b] 3: "It's huge, Hiro! My name is Won-myeong, the one who will become an adult!"
+[ollama:qwen2.5:7b] 4: '-What? A new paycheck?'
 [inpaint] patches=4
 ```
+
+Visual note: `01_blocks.png` put green boxes over the Korean speech regions. `02_inpainted.png` cleared the main text areas, with faint residual characters still visible at the bottom edge of one lower bubble.
 
 ## Files Touched
 

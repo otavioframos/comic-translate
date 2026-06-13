@@ -24,3 +24,6 @@ The desktop app runs detection and inpainting through callbacks. The server now 
 
 ## 2026-06-13 — Korean sample caveat — noted
 The Desktop file named `korean sample.jpg` returned HTTP 200 through the Korean path, but the visible content appears mostly Japanese/Instagram text. It is useful for route coverage, not strong Korean OCR quality validation.
+
+## 2026-06-13 — replacement Korean sample — resolved
+The Desktop file `korean sample.webp` is a stronger Korean sample. It returned HTTP 200 through the Korean path, produced Korean OCR for 4 detected blocks, returned non-empty Ollama translations, and produced inpaint patches for all 4 blocks.
