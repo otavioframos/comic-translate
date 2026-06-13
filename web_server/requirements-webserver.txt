@@ -1,0 +1,8 @@
+# Extra dependencies for the local web server (Step 1).
+# numpy, opencv-python, torch, etc. already come from the main
+# comic-translate requirements.txt — install that first.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-dotenv>=1.0
+requests>=2.31
+python-multipart>=0.0.9

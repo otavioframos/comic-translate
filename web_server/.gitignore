@@ -1,0 +1,12 @@
+# Local secrets / config — never commit your real keys or model choices
+.env
+
+# Server scratch output
+debug_out/
+translated_*.png
+translated_*.jpg
+
+# Python
+__pycache__/
+*.pyc
+.venv/
