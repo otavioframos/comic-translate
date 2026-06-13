@@ -27,3 +27,6 @@ The Desktop file named `korean sample.jpg` returned HTTP 200 through the Korean 
 
 ## 2026-06-13 — replacement Korean sample — resolved
 The Desktop file `korean sample.webp` is a stronger Korean sample. It returned HTTP 200 through the Korean path, produced Korean OCR for 4 detected blocks, returned non-empty Ollama translations, and produced inpaint patches for all 4 blocks.
+
+## 2026-06-13 — Step 2 renderer — resolved
+The server now renders translated text through the repo's Qt save-rendering path (`ImageSaveRenderer` plus `TextItemProperties`) instead of a separate Pillow-only renderer. This keeps the headless output closer to desktop/batch export behavior while avoiding GUI window setup.

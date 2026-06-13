@@ -34,6 +34,16 @@ from config import CONFIG
 from modules.utils.image_utils import generate_mask
 
 
+def _alignment_map():
+    from PySide6 import QtCore
+
+    return {
+        0: QtCore.Qt.AlignmentFlag.AlignLeft,
+        1: QtCore.Qt.AlignmentFlag.AlignCenter,
+        2: QtCore.Qt.AlignmentFlag.AlignRight,
+    }
+
+
 class _Combo:
     """Fakes a Qt combo box: real code reads the language via .currentText()."""
 
@@ -206,10 +216,14 @@ class HeadlessMainPage:
         self.webtoon_mode = False
 
         # ---- language plumbing (VERIFY names against controller.py) ----------
-        self.lang_mapping = {}                       # display name -> code
+        self.lang_mapping = {
+            "Japanese": "Japanese",
+            "Korean": "Korean",
+            "English": "English",
+        }
         self.s_combo = _Combo(self.source_lang)      # source-language widget
         self.t_combo = _Combo(self.target_lang)      # target-language widget
-        self.button_to_alignment = {}
+        self.button_to_alignment = _alignment_map()
 
     # ---- convenience helpers the SERVER calls (not part of the GUI API) ------
     def load_image(self, bgr_img):
@@ -246,8 +260,23 @@ class HeadlessMainPage:
         return None
 
     def render_settings(self):
-        return type("RenderSettings", (), {
-            "font_family": "Arial",
-            "upper_case": False,
-            "outline": False,
-        })()
+        from modules.rendering.render import TextRenderingSettings
+        from modules.utils.language_utils import get_layout_direction
+
+        target_lang = self.lang_mapping.get(self.t_combo.currentText(), self.t_combo.currentText())
+        return TextRenderingSettings(
+            alignment_id=1,
+            font_family="",
+            min_font_size=6,
+            max_font_size=28,
+            color="#000000",
+            upper_case=False,
+            outline=True,
+            outline_color="#ffffff",
+            outline_width="1.0",
+            bold=False,
+            italic=False,
+            underline=False,
+            line_spacing="1.0",
+            direction=get_layout_direction(target_lang),
+        )

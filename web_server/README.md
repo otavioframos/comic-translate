@@ -1,4 +1,4 @@
-# Comic-Translate — Local Web Server (Step 1)
+# Comic-Translate — Local Web Server
 
 A small headless server that runs the comic-translate **pipeline without the GUI**
 and translates pages **for free** using a local Ollama model (no API key, no
@@ -58,19 +58,22 @@ In `.env`, the line `OLLAMA_MODEL`:
 
 No code changes — same files run on both machines.
 
-## Honesty about what's stubbed
-This is **Step 1**: the pipeline runs end-to-end *except* the final "draw the
-translation back onto the page" (render) step, which returns the inpainted image
-as a placeholder. Detection, OCR and translation are real. Every spot that calls
-into the comic-translate codebase is marked `(VERIFY)` because exact method names
-can differ by fork — confirm them with `discover_main_page_attrs.py`.
+## Current status
+Step 1 proved the local, key-free pipeline through detection, OCR, Ollama
+translation, and inpainting. Step 2 wires the final render step: translated text
+is wrapped, sized, and drawn back onto the inpainted page using the repo's Qt
+save-rendering path.
+
+The output is now a translated image, not just cleaned bubbles. Text placement
+quality still depends on detection/inpainting bounds; tight or partial bubbles
+can leave residual source text or imperfect centering.
 
 ## Languages
 - **Japanese** → manga-ocr (clean install) ✅
 - **Korean** → Pororo (validate install early)
 - **Chinese** → PaddleOCR (the fiddly one — add only when you actually need it)
 
-## After Step 1 passes
-1. Wire the real **render** step in `server.py:_render()`.
+## Next steps
+1. Improve render placement and source-text cleanup for tight/partial bubbles.
 2. Build the **browser extension** (capture page image → POST here → overlay).
 3. Package as a **menu-bar app + launchd auto-start** for the end user.

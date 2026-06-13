@@ -17,6 +17,7 @@ source .venv/bin/activate
 # Apple Silicon: let the few GPU ops Metal doesn't support fall back to the CPU
 # instead of crashing the pipeline.
 export PYTORCH_ENABLE_MPS_FALLBACK=1
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 
 # Load settings so we know the host/port and Ollama address.
 set -a

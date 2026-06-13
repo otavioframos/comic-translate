@@ -22,3 +22,9 @@ uv.lock
 test_*.py
 demo_*.py
 benchmarks/
+
+# Web server test outputs
+translated_*.png
+translated_*.jpg
+translated_*.jpeg
+translated_*.webp

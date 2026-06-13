@@ -7,7 +7,7 @@ Model: `qwen2.5:7b` via local Ollama
 
 ## Summary
 
-Step 1 is functionally passing for the supplied Japanese and Korean samples: the server boots, `/health` returns OK, page POSTs return HTTP 200, detection finds text blocks, OCR produces non-empty source text, Ollama returns non-empty translations, and inpainting returns cleaned images. The render step remains intentionally stubbed.
+Step 1 is functionally passing for the supplied Japanese and Korean samples: the server boots, `/health` returns OK, page POSTs return HTTP 200, detection finds text blocks, OCR produces non-empty source text, Ollama returns non-empty translations, and inpainting returns cleaned images. The original Step 1 render placeholder has now been superseded by Step 2; see `STEP2_RENDER_REPORT.md`.
 
 The first Desktop file named `korean sample.jpg` exercised the Korean route but was not a strong Korean-language quality sample. The replacement Desktop file `korean sample.webp` is a stronger Korean sample and passed the same detection, OCR, translation, and inpainting path.
 
@@ -83,7 +83,7 @@ Added or completed in `web_server/headless_main_page.py`:
 - Block translation attribute verified as `.translation`.
 - Box attributes verified as `.bubble_xyxy` and `.xyxy`; debug drawing now prefers `bubble_xyxy` without NumPy truth-value errors.
 - `inpaint()` verified to return patches instead of mutating the image directly. The shim now applies returned patches to the current image.
-- Render intentionally remains stubbed and returns the inpainted image.
+- Render was intentionally stubbed for Step 1; Step 2 now draws translated text back onto the inpainted image through the repo's Qt save-rendering path.
 - Uploaded grayscale images are normalized to RGB before detection.
 - Server uses repo-native `imkit` decode/encode/write helpers instead of an undeclared `cv2` dependency.
 - `setup_mac.sh` now enforces Python 3.12 and starts Ollama before `ollama pull`.
@@ -134,3 +134,4 @@ Visual note: `01_blocks.png` put green boxes over the Korean speech regions. `02
 - `web_server/qa/QA_REPORT.md`
 - `web_server/qa/PROGRESS.md`
 - `web_server/qa/DECISIONS.md`
+- `web_server/qa/STEP2_RENDER_REPORT.md`

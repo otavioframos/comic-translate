@@ -1,20 +1,24 @@
 """
-Comic-Translate local web server — STEP 1.
+Comic-Translate local web server.
 
 Exposes ONE endpoint, POST /translate, that takes a comic page image and returns
 the translated image. No GUI, no cloud, no API keys: OCR runs locally and the
-translation is done locally by Ollama. This is the engine the browser extension
-will later call.
+translation is done locally by Ollama. The final render step draws translated
+text back onto the inpainted page. This is the engine the browser extension will
+later call.
 
 Start it with:   ./web_server/run.sh
 """
 import sys
 import time
+import os
 import threading
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import Response
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # This file lives in web_server/. The repo root (with pipeline/, controller.py)
 # is its parent — add it so we can import the real pipeline.
@@ -37,6 +41,7 @@ app = FastAPI(title="Comic-Translate Local Server")
 _LOCK = threading.Lock()
 _main_page = None
 _pipeline = None
+_qt_app = None
 
 
 def _warm():
@@ -131,6 +136,8 @@ def _run_pipeline(img, src, tgt):
     translations = translate_lines(sources, src, tgt)
     for block, text in zip(mp.blk_list, translations):
         setattr(block, "translation", text)
+        setattr(block, "source_lang", src)
+        setattr(block, "target_lang", tgt)
     for idx, text in enumerate(translations, 1):
         print(f"[ollama:{CONFIG.ollama_model}] {idx}: {text!r}")
 
@@ -147,16 +154,126 @@ def _run_pipeline(img, src, tgt):
 
 
 def _render(pipeline, main_page):
-    """
-    TODO (VERIFY): rendering lives OUTSIDE main_pipeline.py — usually in
-    controller.py or a modules/rendering file. Grep for "render" and wire the
-    real call here.
+    """Render translated text back onto the inpainted page."""
+    _ensure_qt_app()
 
-    Until that's wired, we return the inpainted image so the whole pipeline is
-    testable end-to-end (you'll see erased bubbles + correct boxes, just no
-    typeset text yet). That still proves detection + OCR + translation work.
-    """
-    return main_page.current_image()
+    from PySide6.QtGui import QColor
+
+    from app.ui.canvas.save_renderer import ImageSaveRenderer
+    from app.ui.canvas.text.text_item_properties import TextItemProperties
+    from app.ui.canvas.text_item import OutlineInfo, OutlineType
+    from modules.rendering.render import (
+        get_best_render_area,
+        is_vertical_block,
+        pyside_word_wrap,
+    )
+    from modules.utils.image_utils import get_smart_text_color
+    from modules.utils.language_utils import get_language_code, is_no_space_lang
+    from modules.utils.translator_utils import format_translations
+
+    image = main_page.current_image()
+    if image is None:
+        return image
+
+    settings = main_page.render_settings()
+    target_lang = main_page.lang_mapping.get(
+        main_page.t_combo.currentText(),
+        main_page.t_combo.currentText(),
+    )
+    target_lang_code = get_language_code(target_lang)
+
+    format_translations(
+        main_page.blk_list,
+        target_lang_code,
+        upper_case=settings.upper_case,
+    )
+    get_best_render_area(main_page.blk_list, image)
+
+    alignment = main_page.button_to_alignment[settings.alignment_id]
+    font_family = settings.font_family
+    base_font_color = QColor(settings.color)
+    outline_color = QColor(settings.outline_color) if settings.outline else None
+    outline_width = float(settings.outline_width)
+    line_spacing = float(settings.line_spacing)
+
+    text_items_state = []
+    rendered_count = 0
+    for block in main_page.blk_list:
+        translation = getattr(block, "translation", "")
+        if not translation or len(translation) == 1:
+            continue
+
+        x1, y1, width, height = block.xywh
+        vertical = is_vertical_block(block, target_lang_code)
+        wrapped, font_size, rendered_width, rendered_height = pyside_word_wrap(
+            translation,
+            font_family,
+            int(max(1, width)),
+            int(max(1, height)),
+            line_spacing,
+            outline_width,
+            settings.bold,
+            settings.italic,
+            settings.underline,
+            alignment,
+            settings.direction,
+            settings.max_font_size,
+            settings.min_font_size,
+            vertical,
+            is_no_space_lang(target_lang_code),
+            return_metrics=True,
+        )
+
+        font_color = get_smart_text_color(block.font_color, base_font_color)
+        text_props = TextItemProperties(
+            text=wrapped,
+            font_family=font_family,
+            font_size=font_size,
+            text_color=font_color,
+            alignment=alignment,
+            line_spacing=line_spacing,
+            outline_color=outline_color,
+            outline_width=outline_width,
+            bold=settings.bold,
+            italic=settings.italic,
+            underline=settings.underline,
+            position=(float(x1), float(y1)),
+            rotation=float(getattr(block, "angle", 0) or 0),
+            scale=1.0,
+            transform_origin=getattr(block, "tr_origin_point", None) or (0, 0),
+            width=rendered_width,
+            height=rendered_height,
+            direction=settings.direction,
+            vertical=vertical,
+            selection_outlines=[
+                OutlineInfo(
+                    0,
+                    len(wrapped),
+                    outline_color,
+                    outline_width,
+                    OutlineType.Full_Document,
+                )
+            ] if settings.outline else [],
+        )
+        text_items_state.append(text_props.to_dict())
+        rendered_count += 1
+
+    renderer = ImageSaveRenderer(image)
+    renderer.add_state_to_image({"text_items_state": text_items_state})
+    out = renderer.render_to_image()
+    print(f"[render] text_items={rendered_count}")
+    return out
+
+
+def _ensure_qt_app():
+    global _qt_app
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None:
+        _qt_app = QApplication([])
+    else:
+        _qt_app = app
 
 
 def _dump(name, img):
