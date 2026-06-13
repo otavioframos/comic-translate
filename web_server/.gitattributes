@@ -1,0 +1,4 @@
+# Shell scripts MUST stay LF or macOS bash fails with "bad interpreter: ^M".
+*.sh    text eol=lf
+# Keep Python LF everywhere too (harmless, avoids noisy diffs).
+*.py    text eol=lf
