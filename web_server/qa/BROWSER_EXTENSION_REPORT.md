@@ -19,8 +19,9 @@ CSS-background, and protected reader pages.
 - Use "Start Reading Mode" for a click-through translated overlay that refreshes
   after scrolling stops.
 - Use "Start Whole Page Slices" to capture viewport-sized document slices
-  without scrolling the live page, translate the current slice first, and fill
-  nearby slices as they complete.
+  without scrolling the live page. The extension captures every slice in one
+  debugger session, releases the page, then translates the queued captures and
+  fills slices in as they complete.
 - Configure local server URL, source language, and target language in the popup.
 - Defaults to `http://127.0.0.1:8000`, `Japanese` to `English`.
 - Uses the local server only; no cloud translator or API key is introduced.
@@ -41,6 +42,9 @@ CSS-background, and protected reader pages.
 - Requires the local server to be running first.
 - Whole Page Slices depends on Chrome's `debugger` permission and may show a
   debugging warning while active.
+- Whole Page Slices batches capture in the extension, but still posts one slice
+  per `POST /translate` request because the server currently owns a single
+  translation/rendering pipeline lock.
 - Earlier whole-page slice overlays used a document-height absolute layer; on
   some readers that can interfere with normal scrolling even when pointer events
   are disabled. The overlay is now fixed to the viewport and slices are

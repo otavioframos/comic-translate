@@ -193,8 +193,10 @@ async function startPageSliceMode(tabId) {
 
   await ensureContentScript(tabId);
   const settings = await getSettings();
-  const job = { cancelled: false, attached: false };
+  const target = { tabId };
+  const job = { cancelled: false, attached: false, target };
   pageJobs.set(tabId, job);
+  let capturedSlices = [];
 
   try {
     await notifyTab(tabId, {
@@ -202,7 +204,6 @@ async function startPageSliceMode(tabId) {
       status: "Preparing whole-page capture..."
     });
 
-    const target = { tabId };
     await chrome.debugger.attach(target, "1.3");
     job.attached = true;
     await chrome.debugger.sendCommand(target, "Page.enable");
@@ -234,7 +235,7 @@ async function startPageSliceMode(tabId) {
       const height = Math.min(sliceHeight, contentHeight - y);
       await notifyTab(tabId, {
         type: "ct-page-slice-status",
-        status: `Translating slice ${index + 1} of ${slices.length}...`
+        status: `Capturing slice ${index + 1} of ${slices.length}...`
       });
 
       const screenshot = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", {
@@ -243,17 +244,55 @@ async function startPageSliceMode(tabId) {
         captureBeyondViewport: true,
         clip: { x: 0, y, width, height, scale: 1 }
       });
-      const inputBlob = dataUrlToBlob(`data:image/png;base64,${screenshot.data}`);
-      const outputBlob = await postToLocalServer(inputBlob, `page-slice-${index + 1}.png`, settings);
-      const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
-
-      await notifyTab(tabId, {
-        type: "ct-page-slice-complete",
+      capturedSlices.push({
         index,
         total: slices.length,
         y,
         width,
         height,
+        blob: dataUrlToBlob(`data:image/png;base64,${screenshot.data}`)
+      });
+    }
+
+    if (job.attached) {
+      await chrome.debugger.detach(target).catch(() => {});
+      job.attached = false;
+    }
+
+    if (job.cancelled) {
+      return;
+    }
+
+    await notifyTab(tabId, {
+      type: "ct-page-slice-status",
+      status: `Captured ${capturedSlices.length} slices. Translating...`
+    });
+
+    for (let queueIndex = 0; queueIndex < capturedSlices.length; queueIndex += 1) {
+      if (job.cancelled) {
+        break;
+      }
+
+      const slice = capturedSlices[queueIndex];
+      await notifyTab(tabId, {
+        type: "ct-page-slice-status",
+        status: `Translating slice ${queueIndex + 1} of ${capturedSlices.length}...`
+      });
+
+      const outputBlob = await postToLocalServer(
+        slice.blob,
+        `page-slice-${slice.index + 1}.png`,
+        settings
+      );
+      const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
+
+      await notifyTab(tabId, {
+        type: "ct-page-slice-complete",
+        index: slice.index,
+        total: slice.total,
+        y: slice.y,
+        width: slice.width,
+        height: slice.height,
         dataUrl: translatedDataUrl
       });
     }
@@ -265,6 +304,9 @@ async function startPageSliceMode(tabId) {
       });
     }
   } catch (error) {
+    if (job.cancelled) {
+      return;
+    }
     await notifyTab(tabId, {
       type: "ct-page-slice-error",
       error: error.message
@@ -272,8 +314,9 @@ async function startPageSliceMode(tabId) {
     throw error;
   } finally {
     if (job.attached) {
-      await chrome.debugger.detach({ tabId }).catch(() => {});
+      await chrome.debugger.detach(target).catch(() => {});
     }
+    capturedSlices = [];
     pageJobs.delete(tabId);
   }
 }
@@ -282,6 +325,10 @@ async function stopPageSliceMode(tabId) {
   const job = pageJobs.get(tabId);
   if (job) {
     job.cancelled = true;
+    if (job.attached && job.target) {
+      await chrome.debugger.detach(job.target).catch(() => {});
+      job.attached = false;
+    }
   }
   await notifyTab(tabId, { type: "ct-page-slice-stop" });
 }
