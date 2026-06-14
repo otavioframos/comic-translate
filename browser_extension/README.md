@@ -23,6 +23,9 @@ Chromium extension prototype for the local web server.
 - For canvas/CSS/protected readers, open the popup and choose "Translate
   Viewport". The extension captures the visible tab area, translates that
   screenshot, and overlays the translated result on top of the page.
+- Choose "Start Reading Mode" to keep reading with a click-through translated
+  overlay. When you scroll and pause, the extension captures and translates the
+  new visible viewport. Press Escape or choose "Stop Reading Mode" to exit.
 
 The extension sends the image to `http://127.0.0.1:8000/translate` by default,
 then replaces the page image with the translated PNG returned by the server.
@@ -31,8 +34,8 @@ then replaces the page image with the translated PNG returned by the server.
 
 - The local server must already be running.
 - Translation stays local through Ollama.
-- The viewport mode only translates the currently visible area. Whole-page
-  scrolling/stitching is not implemented yet.
+- Viewport and reading modes only translate the currently visible area.
+  Whole-page scrolling/stitching is not implemented yet.
 - The regular image modes replace `<img>` elements. Canvas-based readers and
   CSS background readers should use viewport mode.
 - Very large pages may take a while because the server processes one image at a

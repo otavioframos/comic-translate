@@ -16,6 +16,8 @@ CSS-background, and protected reader pages.
 - Use the popup button to translate the largest visible image in the current tab.
 - Use "Translate Viewport" to capture the visible browser area, translate that
   screenshot, and overlay the translated result on top of the page.
+- Use "Start Reading Mode" for a click-through translated overlay that refreshes
+  after scrolling stops.
 - Configure local server URL, source language, and target language in the popup.
 - Defaults to `http://127.0.0.1:8000`, `Japanese` to `English`.
 - Uses the local server only; no cloud translator or API key is introduced.
@@ -34,7 +36,7 @@ CSS-background, and protected reader pages.
 ## Known Limitations
 
 - Requires the local server to be running first.
-- Viewport mode translates only the currently visible browser area.
+- Viewport and reading modes translate only the currently visible browser area.
 - Whole-page scroll-and-stitch capture is not implemented yet.
 - Very large images may be slow because the server processes one image at a time.
 - Some protected sites may still block browser-level capture or overlays; this

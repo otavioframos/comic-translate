@@ -82,10 +82,13 @@ use one of the extension actions:
   image".
 - For canvas/CSS/protected readers, open the extension popup and choose
   "Translate Viewport".
+- For a smoother reader flow, choose "Start Reading Mode"; the translated
+  overlay is click-through and refreshes after you scroll and pause.
 
 The image actions replace page `<img>` elements. Viewport mode captures the
 visible browser area, sends that screenshot to the local server, and overlays
-the translated PNG on top of the page.
+the translated PNG on top of the page. Reading mode repeats that viewport
+capture automatically while you scroll.
 
 ## Next steps
 1. Test the extension across real comic reader sites.

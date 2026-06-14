@@ -3,6 +3,7 @@ const DEFAULT_SETTINGS = {
   sourceLang: "Japanese",
   targetLang: "English"
 };
+const viewportJobs = new Set();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -50,7 +51,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    translateViewport(tabId, windowId)
+    translateViewport(tabId, windowId, { readingMode: Boolean(message.readingMode) })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "ct-start-reading-mode" || message?.type === "ct-stop-reading-mode") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    if (!tabId) {
+      sendResponse({ ok: false, error: "No active tab." });
+      return false;
+    }
+
+    forwardToContentScript(tabId, { type: message.type })
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -88,24 +102,33 @@ async function translateImage(tabId, srcUrl) {
   }
 }
 
-async function translateViewport(tabId, windowId) {
+async function translateViewport(tabId, windowId, options = {}) {
+  if (viewportJobs.has(tabId)) {
+    return;
+  }
+  viewportJobs.add(tabId);
   try {
     const settings = await getSettings();
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
-    const inputBlob = dataUrlToBlob(dataUrl);
-
     await ensureContentScript(tabId);
+
     await notifyTab(tabId, {
       type: "ct-viewport-status",
-      status: "Translating visible viewport..."
+      status: options.readingMode
+        ? "Refreshing translated viewport..."
+        : "Translating visible viewport..."
     });
+    await notifyTab(tabId, { type: "ct-before-viewport-capture" });
+
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+    const inputBlob = dataUrlToBlob(dataUrl);
 
     const outputBlob = await postToLocalServer(inputBlob, "viewport.png", settings);
     const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
 
     await notifyTab(tabId, {
       type: "ct-viewport-complete",
-      dataUrl: translatedDataUrl
+      dataUrl: translatedDataUrl,
+      readingMode: Boolean(options.readingMode)
     });
   } catch (error) {
     await notifyTab(tabId, {
@@ -113,6 +136,8 @@ async function translateViewport(tabId, windowId) {
       error: error.message
     });
     throw error;
+  } finally {
+    viewportJobs.delete(tabId);
   }
 }
 
@@ -132,6 +157,11 @@ async function ensureContentScript(tabId) {
   } catch {
     // Browser pages and some restricted pages cannot receive content scripts.
   }
+}
+
+async function forwardToContentScript(tabId, message) {
+  await ensureContentScript(tabId);
+  await chrome.tabs.sendMessage(tabId, message);
 }
 
 async function getSettings() {

@@ -10,6 +10,8 @@ const els = {
   targetLang: document.getElementById("targetLang"),
   save: document.getElementById("save"),
   translateViewport: document.getElementById("translateViewport"),
+  startReading: document.getElementById("startReading"),
+  stopReading: document.getElementById("stopReading"),
   translateLargest: document.getElementById("translateLargest"),
   status: document.getElementById("status")
 };
@@ -66,6 +68,15 @@ els.translateViewport.addEventListener("click", async () => {
   );
 });
 
+els.startReading.addEventListener("click", async () => {
+  await saveSettings();
+  sendRuntimeTabMessage({ type: "ct-start-reading-mode" }, "Reading mode started.");
+});
+
+els.stopReading.addEventListener("click", async () => {
+  sendRuntimeTabMessage({ type: "ct-stop-reading-mode" }, "Reading mode stopped.");
+});
+
 async function loadSettings() {
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
   els.serverUrl.value = settings.serverUrl;
@@ -84,4 +95,24 @@ async function saveSettings() {
 function setStatus(text, isError = false) {
   els.status.textContent = text;
   els.status.style.color = isError ? "#b3261e" : "#475569";
+}
+
+async function sendRuntimeTabMessage(message, successText) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    setStatus("No active tab.", true);
+    return;
+  }
+
+  chrome.runtime.sendMessage({ ...message, tabId: tab.id }, (response) => {
+    if (chrome.runtime.lastError) {
+      setStatus(chrome.runtime.lastError.message, true);
+      return;
+    }
+    if (response?.ok) {
+      setStatus(successText);
+    } else {
+      setStatus(response?.error || "Action failed.", true);
+    }
+  });
 }
