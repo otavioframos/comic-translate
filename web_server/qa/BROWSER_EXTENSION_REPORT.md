@@ -7,12 +7,15 @@ Branch: `add-local-web-server`
 
 Added a Chromium Manifest V3 prototype in `browser_extension/`. It sends comic
 images to the local `POST /translate` server and replaces the page image with
-the translated PNG response.
+the translated PNG response. It also includes viewport capture for canvas,
+CSS-background, and protected reader pages.
 
 ## What Works
 
 - Right-click an image and choose "Translate this image".
 - Use the popup button to translate the largest visible image in the current tab.
+- Use "Translate Viewport" to capture the visible browser area, translate that
+  screenshot, and overlay the translated result on top of the page.
 - Configure local server URL, source language, and target language in the popup.
 - Defaults to `http://127.0.0.1:8000`, `Japanese` to `English`.
 - Uses the local server only; no cloud translator or API key is introduced.
@@ -31,8 +34,8 @@ the translated PNG response.
 ## Known Limitations
 
 - Requires the local server to be running first.
-- Replaces regular `<img>` elements only.
-- Canvas-based readers and CSS-background image readers are not supported yet.
+- Viewport mode translates only the currently visible browser area.
+- Whole-page scroll-and-stitch capture is not implemented yet.
 - Very large images may be slow because the server processes one image at a time.
-- Some websites may block replacement images through page-level security policy;
-  this should be tested on the target comic reader sites.
+- Some protected sites may still block browser-level capture or overlays; this
+  should be tested on the target comic reader sites.

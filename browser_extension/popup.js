@@ -9,6 +9,7 @@ const els = {
   sourceLang: document.getElementById("sourceLang"),
   targetLang: document.getElementById("targetLang"),
   save: document.getElementById("save"),
+  translateViewport: document.getElementById("translateViewport"),
   translateLargest: document.getElementById("translateLargest"),
   status: document.getElementById("status")
 };
@@ -39,6 +40,30 @@ els.translateLargest.addEventListener("click", async () => {
       setStatus(response?.error || "No visible image found.", true);
     }
   });
+});
+
+els.translateViewport.addEventListener("click", async () => {
+  await saveSettings();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    setStatus("No active tab.", true);
+    return;
+  }
+
+  chrome.runtime.sendMessage(
+    { type: "ct-translate-viewport", tabId: tab.id, windowId: tab.windowId },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        setStatus(chrome.runtime.lastError.message, true);
+        return;
+      }
+      if (response?.ok) {
+        setStatus("Sent visible viewport to the local server.");
+      } else {
+        setStatus(response?.error || "Viewport translation failed.", true);
+      }
+    }
+  );
 });
 
 async function loadSettings() {

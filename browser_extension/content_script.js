@@ -1,4 +1,9 @@
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "ct-ping") {
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (message?.type === "ct-translation-status") {
     markImage(message.srcUrl, "translating");
     showToast(message.status || "Translating image...");
@@ -16,6 +21,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "ct-translation-error") {
     markImage(message.srcUrl, "error");
     showToast(message.error || "Translation failed.", true);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "ct-viewport-status") {
+    showToast(message.status || "Translating visible viewport...");
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "ct-viewport-complete") {
+    showViewportOverlay(message.dataUrl);
+    showToast("Viewport translation complete.");
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "ct-viewport-error") {
+    showToast(message.error || "Viewport translation failed.", true);
     sendResponse({ ok: true });
     return false;
   }
@@ -46,6 +70,49 @@ function requestTranslation(srcUrl) {
       showToast(response.error || "Translation failed.", true);
     }
   });
+}
+
+function showViewportOverlay(dataUrl) {
+  removeViewportOverlay();
+
+  const overlay = document.createElement("div");
+  overlay.id = "ct-viewport-overlay";
+  overlay.style.position = "fixed";
+  overlay.style.inset = "0";
+  overlay.style.zIndex = "2147483646";
+  overlay.style.background = "#000";
+  overlay.style.overflow = "hidden";
+
+  const image = document.createElement("img");
+  image.src = dataUrl;
+  image.alt = "Translated viewport";
+  image.style.width = "100vw";
+  image.style.height = "100vh";
+  image.style.objectFit = "fill";
+  image.style.display = "block";
+
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Close";
+  close.style.position = "fixed";
+  close.style.top = "12px";
+  close.style.right = "12px";
+  close.style.zIndex = "2147483647";
+  close.style.border = "0";
+  close.style.borderRadius = "6px";
+  close.style.padding = "8px 10px";
+  close.style.background = "rgba(17, 24, 39, .9)";
+  close.style.color = "#fff";
+  close.style.font = "13px/1 system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+  close.style.cursor = "pointer";
+  close.addEventListener("click", removeViewportOverlay);
+
+  overlay.append(image, close);
+  document.documentElement.appendChild(overlay);
+}
+
+function removeViewportOverlay() {
+  document.getElementById("ct-viewport-overlay")?.remove();
 }
 
 function replaceImage(srcUrl, dataUrl) {

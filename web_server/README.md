@@ -76,11 +76,18 @@ can leave residual source text or imperfect centering.
 ## Browser extension prototype
 The `browser_extension/` folder contains a Chromium Manifest V3 prototype. Load
 it unpacked from `chrome://extensions`, start `./web_server/run.sh`, then
-right-click a comic image and choose "Translate this image". The extension sends
-the image to the local server and replaces the page image with the translated
-PNG response.
+use one of the extension actions:
+
+- For normal image pages, right-click a comic image and choose "Translate this
+  image".
+- For canvas/CSS/protected readers, open the extension popup and choose
+  "Translate Viewport".
+
+The image actions replace page `<img>` elements. Viewport mode captures the
+visible browser area, sends that screenshot to the local server, and overlays
+the translated PNG on top of the page.
 
 ## Next steps
 1. Test the extension across real comic reader sites.
-2. Add support for canvas/CSS-background readers if needed.
+2. Add scroll-and-stitch whole-page capture after viewport mode works reliably.
 3. Package as a **menu-bar app + launchd auto-start** for the end user.

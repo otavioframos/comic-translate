@@ -10,33 +10,57 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Translate this image",
     contexts: ["image"]
   });
+  chrome.contextMenus.create({
+    id: "ct-translate-viewport",
+    title: "Translate visible viewport",
+    contexts: ["page"]
+  });
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== "ct-translate-image" || !tab?.id || !info.srcUrl) {
+  if (!tab?.id) {
     return;
   }
-  translateImage(tab.id, info.srcUrl);
+  if (info.menuItemId === "ct-translate-image" && info.srcUrl) {
+    translateImage(tab.id, info.srcUrl);
+  } else if (info.menuItemId === "ct-translate-viewport") {
+    translateViewport(tab.id, tab.windowId);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== "ct-translate-image") {
-    return false;
+  if (message?.type === "ct-translate-image") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    if (!tabId || !message.srcUrl) {
+      sendResponse({ ok: false, error: "No image selected." });
+      return false;
+    }
+
+    translateImage(tabId, message.srcUrl)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
 
-  const tabId = sender.tab?.id ?? message.tabId;
-  if (!tabId || !message.srcUrl) {
-    sendResponse({ ok: false, error: "No image selected." });
-    return false;
+  if (message?.type === "ct-translate-viewport") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    const windowId = sender.tab?.windowId ?? message.windowId;
+    if (!tabId) {
+      sendResponse({ ok: false, error: "No active tab." });
+      return false;
+    }
+
+    translateViewport(tabId, windowId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
 
-  translateImage(tabId, message.srcUrl)
-    .then(() => sendResponse({ ok: true }))
-    .catch((error) => sendResponse({ ok: false, error: error.message }));
-  return true;
+  return false;
 });
 
 async function translateImage(tabId, srcUrl) {
+  await ensureContentScript(tabId);
   await notifyTab(tabId, {
     type: "ct-translation-status",
     srcUrl,
@@ -61,6 +85,52 @@ async function translateImage(tabId, srcUrl) {
       error: error.message
     });
     throw error;
+  }
+}
+
+async function translateViewport(tabId, windowId) {
+  try {
+    const settings = await getSettings();
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+    const inputBlob = dataUrlToBlob(dataUrl);
+
+    await ensureContentScript(tabId);
+    await notifyTab(tabId, {
+      type: "ct-viewport-status",
+      status: "Translating visible viewport..."
+    });
+
+    const outputBlob = await postToLocalServer(inputBlob, "viewport.png", settings);
+    const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
+
+    await notifyTab(tabId, {
+      type: "ct-viewport-complete",
+      dataUrl: translatedDataUrl
+    });
+  } catch (error) {
+    await notifyTab(tabId, {
+      type: "ct-viewport-error",
+      error: error.message
+    });
+    throw error;
+  }
+}
+
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: "ct-ping" });
+    return;
+  } catch {
+    // The content script is not present in tabs opened before extension reload.
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content_script.js"]
+    });
+  } catch {
+    // Browser pages and some restricted pages cannot receive content scripts.
   }
 }
 
@@ -112,6 +182,17 @@ function filenameFromUrl(srcUrl) {
   } catch {
     return "comic-page.png";
   }
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(",");
+  const contentType = header.match(/data:(.*?);base64/)?.[1] || "image/png";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: contentType });
 }
 
 async function blobToDataUrl(blob, fallbackType) {

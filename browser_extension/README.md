@@ -20,6 +20,9 @@ Chromium extension prototype for the local web server.
 - Right-click a comic image and choose "Translate this image".
 - Or open the extension popup and choose "Translate Visible Image" to send the
   largest visible image on the current page.
+- For canvas/CSS/protected readers, open the popup and choose "Translate
+  Viewport". The extension captures the visible tab area, translates that
+  screenshot, and overlays the translated result on top of the page.
 
 The extension sends the image to `http://127.0.0.1:8000/translate` by default,
 then replaces the page image with the translated PNG returned by the server.
@@ -28,7 +31,9 @@ then replaces the page image with the translated PNG returned by the server.
 
 - The local server must already be running.
 - Translation stays local through Ollama.
-- The prototype replaces regular `<img>` elements. Canvas-based readers and
-  sites that render pages as CSS backgrounds are not supported yet.
+- The viewport mode only translates the currently visible area. Whole-page
+  scrolling/stitching is not implemented yet.
+- The regular image modes replace `<img>` elements. Canvas-based readers and
+  CSS background readers should use viewport mode.
 - Very large pages may take a while because the server processes one image at a
   time.
