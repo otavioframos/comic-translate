@@ -39,3 +39,6 @@ The first extension prototype targets standard `<img>` comic pages via a right-c
 
 ## 2026-06-13 — whole-page slice capture — resolved
 Whole-page-style reading uses Chrome's debugger screenshot API (`Page.captureScreenshot`) to capture viewport-sized document slices beyond the visible viewport without scrolling the live page. This adds a debugger-permission warning, but avoids the jank caused by programmatic scroll-and-capture.
+
+## 2026-06-13 — page-slice overlay scrolling — resolved
+The first whole-page slice overlay was an absolute document-height layer. Even with `pointer-events: none`, that can change scrollable overflow or confuse protected readers. The overlay is now fixed to the viewport and translated slices are repositioned on scroll, so the extension no longer changes document layout.

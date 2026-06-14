@@ -41,6 +41,10 @@ CSS-background, and protected reader pages.
 - Requires the local server to be running first.
 - Whole Page Slices depends on Chrome's `debugger` permission and may show a
   debugging warning while active.
+- Earlier whole-page slice overlays used a document-height absolute layer; on
+  some readers that can interfere with normal scrolling even when pointer events
+  are disabled. The overlay is now fixed to the viewport and slices are
+  repositioned as the page scrolls so it does not mutate document layout.
 - Slice overlays assume normal document scrolling and may need site-specific
   alignment work for readers with nested scroll containers.
 - Very large images may be slow because the server processes one image at a time.

@@ -7,7 +7,9 @@
   const state = {
     readingMode: false,
     refreshTimer: null,
-    pendingRefresh: false
+    pendingRefresh: false,
+    pageSliceMode: false,
+    pageSlices: new Map()
   };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -128,8 +130,8 @@
     return false;
   });
 
-  window.addEventListener("scroll", scheduleReadingRefresh, { passive: true });
-  window.addEventListener("resize", scheduleReadingRefresh, { passive: true });
+  window.addEventListener("scroll", handleScrollOrResize, { passive: true });
+  window.addEventListener("resize", handleScrollOrResize, { passive: true });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       stopReadingMode();
@@ -171,6 +173,11 @@
         }
       }
     );
+  }
+
+  function handleScrollOrResize() {
+    renderPageSlices();
+    scheduleReadingRefresh();
   }
 
   function scheduleReadingRefresh() {
@@ -291,41 +298,71 @@
   function startPageSliceOverlay({ width, height, total }) {
     stopReadingMode(true);
     removePageSliceOverlay();
+    state.pageSliceMode = true;
+    state.pageSlices = new Map();
 
     const overlay = document.createElement("div");
     overlay.id = "ct-page-slice-overlay";
-    overlay.style.position = "absolute";
-    overlay.style.left = "0";
-    overlay.style.top = "0";
-    overlay.style.width = `${width}px`;
-    overlay.style.height = `${height}px`;
-    overlay.style.minHeight = `${height}px`;
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.width = "100vw";
+    overlay.style.height = "100vh";
     overlay.style.zIndex = "2147483644";
     overlay.style.pointerEvents = "none";
     overlay.style.overflow = "hidden";
+    overlay.dataset.pageWidth = String(width);
+    overlay.dataset.pageHeight = String(height);
+    overlay.dataset.total = String(total);
 
     document.documentElement.appendChild(overlay);
     showPageSliceToolbar(`Preparing ${total} slices...`);
   }
 
-  function addPageSlice({ dataUrl, y, width, height }) {
+  function addPageSlice({ dataUrl, y, width, height, index }) {
     const overlay = document.getElementById("ct-page-slice-overlay");
     if (!overlay) {
       return;
     }
+    state.pageSlices.set(index, { dataUrl, y, width, height });
+    renderPageSlices();
+  }
 
-    const slice = document.createElement("img");
-    slice.src = dataUrl;
-    slice.alt = "Translated page slice";
-    slice.style.position = "absolute";
-    slice.style.left = "0";
-    slice.style.top = `${y}px`;
-    slice.style.width = `${width}px`;
-    slice.style.height = `${height}px`;
-    slice.style.display = "block";
-    slice.style.objectFit = "fill";
-    slice.style.pointerEvents = "none";
-    overlay.appendChild(slice);
+  function renderPageSlices() {
+    const overlay = document.getElementById("ct-page-slice-overlay");
+    if (!overlay) {
+      return;
+    }
+    const viewportTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const viewportBottom = viewportTop + window.innerHeight;
+
+    for (const [index, slice] of state.pageSlices.entries()) {
+      let image = overlay.querySelector(`[data-slice-index="${index}"]`);
+      const sliceBottom = slice.y + slice.height;
+      const visible = sliceBottom >= viewportTop - window.innerHeight
+        && slice.y <= viewportBottom + window.innerHeight;
+
+      if (!visible) {
+        image?.remove();
+        continue;
+      }
+
+      if (!image) {
+        image = document.createElement("img");
+        image.dataset.sliceIndex = String(index);
+        image.src = slice.dataUrl;
+        image.alt = "Translated page slice";
+        image.style.position = "absolute";
+        image.style.left = "0";
+        image.style.display = "block";
+        image.style.objectFit = "fill";
+        image.style.pointerEvents = "none";
+        overlay.appendChild(image);
+      }
+
+      image.style.top = `${slice.y - viewportTop}px`;
+      image.style.width = `${slice.width}px`;
+      image.style.height = `${slice.height}px`;
+    }
   }
 
   function showPageSliceToolbar(text) {
@@ -373,6 +410,8 @@
   }
 
   function stopPageSliceMode() {
+    state.pageSliceMode = false;
+    state.pageSlices = new Map();
     removePageSliceOverlay();
     document.getElementById("ct-page-slice-toolbar")?.remove();
     showToast("Whole-page slice mode stopped.");
