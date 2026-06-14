@@ -26,6 +26,9 @@ Chromium extension prototype for the local web server.
 - Choose "Start Reading Mode" to keep reading with a click-through translated
   overlay. When you scroll and pause, the extension captures and translates the
   new visible viewport. Press Escape or choose "Stop Reading Mode" to exit.
+- Choose "Start Whole Page Slices" to capture the document as viewport-sized
+  slices without scrolling the live page. The current slice is translated first,
+  then nearby slices fill in as the local server finishes them.
 
 The extension sends the image to `http://127.0.0.1:8000/translate` by default,
 then replaces the page image with the translated PNG returned by the server.
@@ -35,8 +38,11 @@ then replaces the page image with the translated PNG returned by the server.
 - The local server must already be running.
 - Translation stays local through Ollama.
 - Viewport and reading modes only translate the currently visible area.
-  Whole-page scrolling/stitching is not implemented yet.
+- Whole Page Slices uses Chrome's debugging screenshot API so it can capture
+  beyond the visible viewport without forcing the page to scroll.
 - The regular image modes replace `<img>` elements. Canvas-based readers and
   CSS background readers should use viewport mode.
 - Very large pages may take a while because the server processes one image at a
   time.
+- Chrome will show an extra debugging-permission warning for whole-page slice
+  mode.

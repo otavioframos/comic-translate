@@ -84,11 +84,15 @@ use one of the extension actions:
   "Translate Viewport".
 - For a smoother reader flow, choose "Start Reading Mode"; the translated
   overlay is click-through and refreshes after you scroll and pause.
+- For whole-page-style reading, choose "Start Whole Page Slices"; the extension
+  captures the page as viewport-sized slices without scrolling the live page and
+  fills translated slices into the document as they finish.
 
 The image actions replace page `<img>` elements. Viewport mode captures the
 visible browser area, sends that screenshot to the local server, and overlays
 the translated PNG on top of the page. Reading mode repeats that viewport
-capture automatically while you scroll.
+capture automatically while you scroll. Whole Page Slices uses Chrome's
+debugging screenshot API so it can capture beyond the visible viewport.
 
 ## Next steps
 1. Test the extension across real comic reader sites.

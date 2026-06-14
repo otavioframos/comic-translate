@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
   targetLang: "English"
 };
 const viewportJobs = new Set();
+const pageJobs = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -65,6 +66,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     forwardToContentScript(tabId, { type: message.type })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "ct-start-page-slice-mode") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    if (!tabId) {
+      sendResponse({ ok: false, error: "No active tab." });
+      return false;
+    }
+
+    startPageSliceMode(tabId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "ct-stop-page-slice-mode") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    stopPageSliceMode(tabId)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -162,6 +184,129 @@ async function ensureContentScript(tabId) {
 async function forwardToContentScript(tabId, message) {
   await ensureContentScript(tabId);
   await chrome.tabs.sendMessage(tabId, message);
+}
+
+async function startPageSliceMode(tabId) {
+  if (pageJobs.has(tabId)) {
+    return;
+  }
+
+  await ensureContentScript(tabId);
+  const settings = await getSettings();
+  const job = { cancelled: false, attached: false };
+  pageJobs.set(tabId, job);
+
+  try {
+    await notifyTab(tabId, {
+      type: "ct-page-slice-status",
+      status: "Preparing whole-page capture..."
+    });
+
+    const target = { tabId };
+    await chrome.debugger.attach(target, "1.3");
+    job.attached = true;
+    await chrome.debugger.sendCommand(target, "Page.enable");
+
+    const metrics = await chrome.debugger.sendCommand(target, "Page.getLayoutMetrics");
+    const viewport = metrics.cssVisualViewport || metrics.cssLayoutViewport;
+    const content = metrics.cssContentSize;
+    const width = Math.ceil(viewport.clientWidth || viewport.width || content.width);
+    const viewportHeight = Math.ceil(viewport.clientHeight || viewport.height || 900);
+    const contentHeight = Math.ceil(content.height || viewportHeight);
+    const currentY = Math.max(0, Math.floor(viewport.pageY || 0));
+    const sliceHeight = Math.max(360, viewportHeight);
+    const slices = buildSliceQueue(contentHeight, sliceHeight, currentY);
+
+    await notifyTab(tabId, {
+      type: "ct-page-slice-start",
+      width,
+      height: contentHeight,
+      sliceHeight,
+      total: slices.length
+    });
+
+    for (let index = 0; index < slices.length; index += 1) {
+      if (job.cancelled) {
+        break;
+      }
+
+      const y = slices[index];
+      const height = Math.min(sliceHeight, contentHeight - y);
+      await notifyTab(tabId, {
+        type: "ct-page-slice-status",
+        status: `Translating slice ${index + 1} of ${slices.length}...`
+      });
+
+      const screenshot = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+        captureBeyondViewport: true,
+        clip: { x: 0, y, width, height, scale: 1 }
+      });
+      const inputBlob = dataUrlToBlob(`data:image/png;base64,${screenshot.data}`);
+      const outputBlob = await postToLocalServer(inputBlob, `page-slice-${index + 1}.png`, settings);
+      const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
+
+      await notifyTab(tabId, {
+        type: "ct-page-slice-complete",
+        index,
+        total: slices.length,
+        y,
+        width,
+        height,
+        dataUrl: translatedDataUrl
+      });
+    }
+
+    if (!job.cancelled) {
+      await notifyTab(tabId, {
+        type: "ct-page-slice-status",
+        status: "Whole-page slices complete."
+      });
+    }
+  } catch (error) {
+    await notifyTab(tabId, {
+      type: "ct-page-slice-error",
+      error: error.message
+    });
+    throw error;
+  } finally {
+    if (job.attached) {
+      await chrome.debugger.detach({ tabId }).catch(() => {});
+    }
+    pageJobs.delete(tabId);
+  }
+}
+
+async function stopPageSliceMode(tabId) {
+  const job = pageJobs.get(tabId);
+  if (job) {
+    job.cancelled = true;
+  }
+  await notifyTab(tabId, { type: "ct-page-slice-stop" });
+}
+
+function buildSliceQueue(contentHeight, sliceHeight, currentY) {
+  const starts = [];
+  for (let y = 0; y < contentHeight; y += sliceHeight) {
+    starts.push(y);
+  }
+  const currentIndex = Math.min(
+    starts.length - 1,
+    Math.max(0, Math.floor(currentY / sliceHeight))
+  );
+  const ordered = [starts[currentIndex]];
+  for (let distance = 1; ordered.length < starts.length; distance += 1) {
+    const down = currentIndex + distance;
+    const up = currentIndex - distance;
+    if (down < starts.length) {
+      ordered.push(starts[down]);
+    }
+    if (up >= 0) {
+      ordered.push(starts[up]);
+    }
+  }
+  return ordered;
 }
 
 async function getSettings() {

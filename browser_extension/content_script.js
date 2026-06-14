@@ -81,6 +81,38 @@
       return false;
     }
 
+    if (message?.type === "ct-page-slice-start") {
+      startPageSliceOverlay(message);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "ct-page-slice-status") {
+      showPageSliceToolbar(message.status || "Translating page slices...");
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "ct-page-slice-complete") {
+      addPageSlice(message);
+      showPageSliceToolbar(`Loaded ${message.index + 1} of ${message.total} slices`);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "ct-page-slice-error") {
+      showPageSliceToolbar("Whole-page translation failed");
+      showToast(message.error || "Whole-page translation failed.", true);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message?.type === "ct-page-slice-stop") {
+      stopPageSliceMode();
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message?.type === "ct-translate-largest") {
       const image = findLargestVisibleImage();
       if (!image) {
@@ -101,6 +133,7 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       stopReadingMode();
+      stopPageSliceMode();
     }
   });
 
@@ -234,7 +267,7 @@
       stop.style.background = "#ef4444";
       stop.style.color = "#fff";
       stop.style.cursor = "pointer";
-      stop.addEventListener("click", stopReadingMode);
+      stop.addEventListener("click", () => stopReadingMode());
 
       toolbar.append(label, refresh, stop);
       document.documentElement.appendChild(toolbar);
@@ -244,13 +277,109 @@
     toolbar.querySelector("[data-role='label']").textContent = text;
   }
 
-  function stopReadingMode() {
+  function stopReadingMode(silent = false) {
     state.readingMode = false;
     state.pendingRefresh = false;
     clearTimeout(state.refreshTimer);
     removeViewportOverlay();
     document.getElementById("ct-reading-toolbar")?.remove();
-    showToast("Reading mode stopped.");
+    if (!silent) {
+      showToast("Reading mode stopped.");
+    }
+  }
+
+  function startPageSliceOverlay({ width, height, total }) {
+    stopReadingMode(true);
+    removePageSliceOverlay();
+
+    const overlay = document.createElement("div");
+    overlay.id = "ct-page-slice-overlay";
+    overlay.style.position = "absolute";
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
+    overlay.style.minHeight = `${height}px`;
+    overlay.style.zIndex = "2147483644";
+    overlay.style.pointerEvents = "none";
+    overlay.style.overflow = "hidden";
+
+    document.documentElement.appendChild(overlay);
+    showPageSliceToolbar(`Preparing ${total} slices...`);
+  }
+
+  function addPageSlice({ dataUrl, y, width, height }) {
+    const overlay = document.getElementById("ct-page-slice-overlay");
+    if (!overlay) {
+      return;
+    }
+
+    const slice = document.createElement("img");
+    slice.src = dataUrl;
+    slice.alt = "Translated page slice";
+    slice.style.position = "absolute";
+    slice.style.left = "0";
+    slice.style.top = `${y}px`;
+    slice.style.width = `${width}px`;
+    slice.style.height = `${height}px`;
+    slice.style.display = "block";
+    slice.style.objectFit = "fill";
+    slice.style.pointerEvents = "none";
+    overlay.appendChild(slice);
+  }
+
+  function showPageSliceToolbar(text) {
+    let toolbar = document.getElementById("ct-page-slice-toolbar");
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.id = "ct-page-slice-toolbar";
+      toolbar.style.position = "fixed";
+      toolbar.style.left = "12px";
+      toolbar.style.top = "12px";
+      toolbar.style.zIndex = "2147483647";
+      toolbar.style.display = "flex";
+      toolbar.style.alignItems = "center";
+      toolbar.style.gap = "8px";
+      toolbar.style.padding = "8px 10px";
+      toolbar.style.borderRadius = "6px";
+      toolbar.style.background = "rgba(17, 24, 39, .9)";
+      toolbar.style.color = "#fff";
+      toolbar.style.font = "13px/1 system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+      toolbar.style.boxShadow = "0 8px 24px rgba(0,0,0,.2)";
+
+      const label = document.createElement("span");
+      label.dataset.role = "label";
+
+      const stop = document.createElement("button");
+      stop.type = "button";
+      stop.textContent = "Stop";
+      stop.style.border = "0";
+      stop.style.borderRadius = "4px";
+      stop.style.padding = "5px 7px";
+      stop.style.background = "#ef4444";
+      stop.style.color = "#fff";
+      stop.style.cursor = "pointer";
+      stop.addEventListener("click", () => {
+        chrome.runtime.sendMessage({ type: "ct-stop-page-slice-mode" });
+        stopPageSliceMode();
+      });
+
+      toolbar.append(label, stop);
+      document.documentElement.appendChild(toolbar);
+    }
+
+    toolbar.style.display = "flex";
+    toolbar.querySelector("[data-role='label']").textContent = text;
+  }
+
+  function stopPageSliceMode() {
+    removePageSliceOverlay();
+    document.getElementById("ct-page-slice-toolbar")?.remove();
+    showToast("Whole-page slice mode stopped.");
+  }
+
+  function removePageSliceOverlay() {
+    document.getElementById("ct-page-slice-overlay")?.remove();
   }
 
   function replaceImage(srcUrl, dataUrl) {

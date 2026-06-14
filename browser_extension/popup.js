@@ -12,6 +12,8 @@ const els = {
   translateViewport: document.getElementById("translateViewport"),
   startReading: document.getElementById("startReading"),
   stopReading: document.getElementById("stopReading"),
+  startPageSlices: document.getElementById("startPageSlices"),
+  stopPageSlices: document.getElementById("stopPageSlices"),
   translateLargest: document.getElementById("translateLargest"),
   status: document.getElementById("status")
 };
@@ -75,6 +77,15 @@ els.startReading.addEventListener("click", async () => {
 
 els.stopReading.addEventListener("click", async () => {
   sendRuntimeTabMessage({ type: "ct-stop-reading-mode" }, "Reading mode stopped.");
+});
+
+els.startPageSlices.addEventListener("click", async () => {
+  await saveSettings();
+  sendRuntimeTabMessage({ type: "ct-start-page-slice-mode" }, "Whole page slice mode started.");
+});
+
+els.stopPageSlices.addEventListener("click", async () => {
+  sendRuntimeTabMessage({ type: "ct-stop-page-slice-mode" }, "Whole page slice mode stopped.");
 });
 
 async function loadSettings() {

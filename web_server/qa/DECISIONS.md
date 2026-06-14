@@ -36,3 +36,6 @@ The replacement Korean sample has a cut-off lower bubble where leftover source g
 
 ## 2026-06-13 — browser extension scope — resolved
 The first extension prototype targets standard `<img>` comic pages via a right-click context menu and a popup action for the largest visible image. Canvas-based readers and CSS-background readers are deferred until real target-site testing shows they are needed.
+
+## 2026-06-13 — whole-page slice capture — resolved
+Whole-page-style reading uses Chrome's debugger screenshot API (`Page.captureScreenshot`) to capture viewport-sized document slices beyond the visible viewport without scrolling the live page. This adds a debugger-permission warning, but avoids the jank caused by programmatic scroll-and-capture.

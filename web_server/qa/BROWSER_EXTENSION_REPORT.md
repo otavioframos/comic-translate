@@ -18,6 +18,9 @@ CSS-background, and protected reader pages.
   screenshot, and overlay the translated result on top of the page.
 - Use "Start Reading Mode" for a click-through translated overlay that refreshes
   after scrolling stops.
+- Use "Start Whole Page Slices" to capture viewport-sized document slices
+  without scrolling the live page, translate the current slice first, and fill
+  nearby slices as they complete.
 - Configure local server URL, source language, and target language in the popup.
 - Defaults to `http://127.0.0.1:8000`, `Japanese` to `English`.
 - Uses the local server only; no cloud translator or API key is introduced.
@@ -36,8 +39,10 @@ CSS-background, and protected reader pages.
 ## Known Limitations
 
 - Requires the local server to be running first.
-- Viewport and reading modes translate only the currently visible browser area.
-- Whole-page scroll-and-stitch capture is not implemented yet.
+- Whole Page Slices depends on Chrome's `debugger` permission and may show a
+  debugging warning while active.
+- Slice overlays assume normal document scrolling and may need site-specific
+  alignment work for readers with nested scroll containers.
 - Very large images may be slow because the server processes one image at a time.
 - Some protected sites may still block browser-level capture or overlays; this
   should be tested on the target comic reader sites.
