@@ -28,3 +28,7 @@ translated_*.png
 translated_*.jpg
 translated_*.jpeg
 translated_*.webp
+
+# Browser extension package artifacts
+*.crx
+*.pem

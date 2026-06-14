@@ -73,7 +73,14 @@ can leave residual source text or imperfect centering.
 - **Korean** → Pororo (validate install early)
 - **Chinese** → PaddleOCR (the fiddly one — add only when you actually need it)
 
+## Browser extension prototype
+The `browser_extension/` folder contains a Chromium Manifest V3 prototype. Load
+it unpacked from `chrome://extensions`, start `./web_server/run.sh`, then
+right-click a comic image and choose "Translate this image". The extension sends
+the image to the local server and replaces the page image with the translated
+PNG response.
+
 ## Next steps
-1. Improve render placement and source-text cleanup for tight/partial bubbles.
-2. Build the **browser extension** (capture page image → POST here → overlay).
+1. Test the extension across real comic reader sites.
+2. Add support for canvas/CSS-background readers if needed.
 3. Package as a **menu-bar app + launchd auto-start** for the end user.

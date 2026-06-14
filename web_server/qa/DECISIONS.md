@@ -33,3 +33,6 @@ The server now renders translated text through the repo's Qt save-rendering path
 
 ## 2026-06-13 — partial-bubble residual text — deferred
 The replacement Korean sample has a cut-off lower bubble where leftover source glyphs sit outside the detected text block. Wider text masks and conservative render backplates improve normal bubbles but do not fully solve this edge case. Defer a full fix unless it appears frequently; the proper solution is a bubble-shape cleanup mask, not aggressive rectangular erasing.
+
+## 2026-06-13 — browser extension scope — resolved
+The first extension prototype targets standard `<img>` comic pages via a right-click context menu and a popup action for the largest visible image. Canvas-based readers and CSS-background readers are deferred until real target-site testing shows they are needed.
