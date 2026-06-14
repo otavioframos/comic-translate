@@ -28,8 +28,9 @@ Chromium extension prototype for the local web server.
   new visible viewport. Press Escape or choose "Stop Reading Mode" to exit.
 - Choose "Start Whole Page Slices" to capture the document as viewport-sized
   slices without scrolling the live page. The extension captures all slices in
-  one debugger session, releases the page, then translates the captured queue
-  and fills slices in as the local server finishes them.
+  one debugger session, starts translating the first capture while the remaining
+  captures continue, releases the page, then fills translated slices in as the
+  local server finishes them.
 
 The extension sends the image to `http://127.0.0.1:8000/translate` by default,
 then replaces the page image with the translated PNG returned by the server.

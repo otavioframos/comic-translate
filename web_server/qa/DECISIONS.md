@@ -44,4 +44,7 @@ Whole-page-style reading uses Chrome's debugger screenshot API (`Page.captureScr
 The first whole-page slice overlay was an absolute document-height layer. Even with `pointer-events: none`, that can change scrollable overflow or confuse protected readers. The overlay is now fixed to the viewport and translated slices are repositioned on scroll, so the extension no longer changes document layout.
 
 ## 2026-06-13 — page-slice capture queue — resolved
-Whole-page slice mode now captures the full slice queue first in one Chrome debugger session, detaches from the page, and only then starts sending slices to the local server. This removes the capture/translate/capture loop that kept the page under debugger control while waiting for server work. Server-side batch translation is still deferred because `POST /translate` owns a single pipeline lock and already serializes image processing.
+Whole-page slice mode now captures the full slice queue in one Chrome debugger session and detaches from the page before painting any translated overlays. This removes the capture/translate/capture loop that kept the page under debugger control while waiting for visible overlay work. Server-side batch translation is still deferred because `POST /translate` owns a single pipeline lock and already serializes image processing.
+
+## 2026-06-13 — first-slice latency — resolved
+Whole-page slice mode now starts translating the first captured slice while the rest of the page is still being captured. The translated overlay is still deferred until after capture finishes, so the extension does not capture its own overlay in later slices.

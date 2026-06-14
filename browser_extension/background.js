@@ -197,6 +197,7 @@ async function startPageSliceMode(tabId) {
   const job = { cancelled: false, attached: false, target };
   pageJobs.set(tabId, job);
   let capturedSlices = [];
+  let firstSliceTranslation = null;
 
   try {
     await notifyTab(tabId, {
@@ -252,6 +253,15 @@ async function startPageSliceMode(tabId) {
         height,
         blob: dataUrlToBlob(`data:image/png;base64,${screenshot.data}`)
       });
+
+      if (index === 0 && !job.cancelled) {
+        firstSliceTranslation = translateCapturedPageSlice(tabId, capturedSlices[0], settings, {
+          position: 1,
+          total: slices.length,
+          deferOverlay: true
+        });
+        firstSliceTranslation.catch(() => {});
+      }
     }
 
     if (job.attached) {
@@ -263,37 +273,26 @@ async function startPageSliceMode(tabId) {
       return;
     }
 
+    if (firstSliceTranslation) {
+      const firstSliceMessage = await firstSliceTranslation;
+      if (!job.cancelled) {
+        await notifyTab(tabId, firstSliceMessage);
+      }
+    }
+
     await notifyTab(tabId, {
       type: "ct-page-slice-status",
-      status: `Captured ${capturedSlices.length} slices. Translating...`
+      status: `Captured ${capturedSlices.length} slices. Translating remaining slices...`
     });
 
-    for (let queueIndex = 0; queueIndex < capturedSlices.length; queueIndex += 1) {
+    for (let queueIndex = 1; queueIndex < capturedSlices.length; queueIndex += 1) {
       if (job.cancelled) {
         break;
       }
 
-      const slice = capturedSlices[queueIndex];
-      await notifyTab(tabId, {
-        type: "ct-page-slice-status",
-        status: `Translating slice ${queueIndex + 1} of ${capturedSlices.length}...`
-      });
-
-      const outputBlob = await postToLocalServer(
-        slice.blob,
-        `page-slice-${slice.index + 1}.png`,
-        settings
-      );
-      const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
-
-      await notifyTab(tabId, {
-        type: "ct-page-slice-complete",
-        index: slice.index,
-        total: slice.total,
-        y: slice.y,
-        width: slice.width,
-        height: slice.height,
-        dataUrl: translatedDataUrl
+      await translateCapturedPageSlice(tabId, capturedSlices[queueIndex], settings, {
+        position: queueIndex + 1,
+        total: capturedSlices.length
       });
     }
 
@@ -319,6 +318,36 @@ async function startPageSliceMode(tabId) {
     capturedSlices = [];
     pageJobs.delete(tabId);
   }
+}
+
+async function translateCapturedPageSlice(tabId, slice, settings, progress) {
+  await notifyTab(tabId, {
+    type: "ct-page-slice-status",
+    status: `Translating slice ${progress.position} of ${progress.total}...`
+  });
+
+  const outputBlob = await postToLocalServer(
+    slice.blob,
+    `page-slice-${slice.index + 1}.png`,
+    settings
+  );
+  const translatedDataUrl = await blobToDataUrl(outputBlob, "image/png");
+
+  const message = {
+    type: "ct-page-slice-complete",
+    index: slice.index,
+    total: slice.total,
+    y: slice.y,
+    width: slice.width,
+    height: slice.height,
+    dataUrl: translatedDataUrl
+  };
+
+  if (!progress.deferOverlay) {
+    await notifyTab(tabId, message);
+  }
+
+  return message;
 }
 
 async function stopPageSliceMode(tabId) {
